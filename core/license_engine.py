@@ -4,8 +4,44 @@ from datetime import datetime
 class LicenseEngine:
     def __init__(self, db_name="trading_bot.db"):
         self.db_name = db_name
+        self.init_db()
+
+    def init_db(self):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        
+        # trade_history টেবিল তৈরি
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trade_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT,
+                action TEXT,
+                price REAL,
+                amount REAL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # licenses টেবিল তৈরি
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS licenses (
+                key TEXT PRIMARY KEY,
+                tier TEXT,
+                expires TEXT
+            )
+        ''')
+        
+        # ডিফল্ট টেস্ট কি
+        cursor.execute('''
+            INSERT OR IGNORE INTO licenses (key, tier, expires)
+            VALUES ('PRO-AMIR-2026', 'Pro', '2027-12-31')
+        ''')
+        
+        conn.commit()
+        conn.close()
 
     def verify_license(self, license_key: str) -> dict:
+        self.init_db()
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         
@@ -25,6 +61,7 @@ class LicenseEngine:
         return {"status": True, "tier": tier, "message": f"License Valid! Tier: {tier}"}
 
     def add_or_update_license(self, key: str, tier: str, expires: str):
+        self.init_db()
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         cursor.execute('''
@@ -38,6 +75,7 @@ class LicenseEngine:
         conn.close()
 
     def get_all_licenses(self) -> dict:
+        self.init_db()
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         cursor.execute("SELECT key, tier, expires FROM licenses")
