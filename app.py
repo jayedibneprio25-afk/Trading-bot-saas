@@ -11,9 +11,9 @@ VALID_LICENSES = {
     "PRO-TEST-2026": {"tier": "Pro", "expires": "2027-12-31"}
 }
 
-# --- Telegram Notifier Helper ---
-BOT_TOKEN = ""  # BotFather থেকে পাওয়া টোকেন এখানে দিতে পারো
-CHAT_ID = ""    # userinfobot থেকে পাওয়া আইডি এখানে দিতে পারো
+# --- Telegram Credentials ---
+BOT_TOKEN = "8615449265:AAEVgIIdI-ZkneGlOfNP30QfsgPrymqa5_Y"
+CHAT_ID = "6819917637"
 
 def send_telegram_alert(message: str):
     if not BOT_TOKEN or not CHAT_ID:
