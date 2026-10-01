@@ -8,14 +8,14 @@ app = FastAPI(title="Pro Trading Bot SaaS API")
 
 # --- Supabase Credentials ---
 SUPABASE_URL = "https://zvzbbhjzesubyxbknxd.supabase.co"
-SUPABASE_KEY = "sb_publishable_7vsvBnouIM1bFkYkHX_dYg_vkgan..."  # তোমার কপি করা পুরো Key-টি পেস্ট করো
+SUPABASE_KEY = "sb_publishable_7vsvBnouIM1bFkYkHX_dYg_vkgan5EO"  # Supabase Publishable Key purota boshao
 
 # Supabase Client Initialization
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- Telegram Credentials ---
-BOT_TOKEN = "8615449265:AAEVgIIdI-ZkneGlOfNP30QfsgPrymqa5_Y"  # তোমার টেলিগ্রাম বট টোকেন বসাও
-CHAT_ID = "6819917637"      # তোমার টেলিগ্রাম চ্যাট আইডি বসাও
+BOT_TOKEN = "8615449265:AAEVgIIdI-ZkneGlOfNP30QfsgPrymqa5_Y"  # Tomar Telegram Bot Token
+CHAT_ID = "6819917637"      # Tomar Telegram Chat ID
 
 def send_telegram_alert(message: str):
     if not BOT_TOKEN or not CHAT_ID:
@@ -56,7 +56,7 @@ class LicenseModel(BaseModel):
 def home():
     return {"status": "Online", "message": "Pro Trading Bot SaaS API Engine Running with Supabase DB!"}
 
-# ১. লাইসেন্স ভ্যালিডেশন (Supabase DB থেকে চেক)
+# 1. License Validation (Supabase DB)
 @app.get("/verify-license/{license_key}")
 def verify_license(license_key: str):
     try:
@@ -78,7 +78,7 @@ def verify_license(license_key: str):
     except Exception as e:
         return {"status": False, "tier": "None", "message": f"Database Error: {str(e)}"}
 
-# ২. ড্যাশবোর্ড থেকে লাইসেন্স যোগ করার এন্ডপয়েন্ট (Supabase-এ পার্মানেন্ট সেভ)
+# 2. Add License Endpoint (Supabase DB)
 @app.post("/add-license")
 def add_new_license(data: LicenseModel):
     try:
@@ -92,7 +92,7 @@ def add_new_license(data: LicenseModel):
     except Exception as e:
         return {"status": False, "message": f"Database Error: {str(e)}"}
 
-# ৩. ট্রেড ট্রিগার ও টেলিগ্রাম অ্যালার্ট এন্ডপয়েন্ট
+# 3. Trade Trigger & Telegram Alert Endpoint
 @app.post("/trigger-trade/{license_key}/{action}")
 def trigger_trade(license_key: str, action: str):
     val_res = verify_license(license_key)
