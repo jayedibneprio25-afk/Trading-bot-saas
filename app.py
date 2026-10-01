@@ -1,5 +1,6 @@
+from core.license_engine import license_engine
 from fastapi import FastAPI
-from core.license_engine import license_engine import threading
+import threading
 import time
 from config.settings import config
 from utils.logger import logger
@@ -60,10 +61,8 @@ def health_check():
     return {
         "status": "online",
         "system": "Pro Trading Bot SaaS",
-        "environment": config.ENV
-    }
-
+        "environment": config.ENV}
 @app.get("/verify-license/{key}")
 def verify_user_license(key: str):
     result = license_engine.verify_license(key)
-    return results
+    return result        
