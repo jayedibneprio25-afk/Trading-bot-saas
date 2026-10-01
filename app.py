@@ -8,14 +8,14 @@ app = FastAPI(title="Pro Trading Bot SaaS API")
 
 # --- Supabase Credentials ---
 SUPABASE_URL = "https://zvzbbhjzesubyxbknxd.supabase.co"
-SUPABASE_KEY = "sb_publishable_7vsvBnouIM1bFkYkHX_dYg_vkgan5EO"  # Supabase Publishable Key purota boshao
+SUPABASE_KEY = "sb_publishable_7vsvBnouIM1bFkYkHX_dYg_vkgan..." # তোমার কপি করা পুরো Key-টি এখানে বসাও
 
 # Supabase Client Initialization
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- Telegram Credentials ---
-BOT_TOKEN = "8615449265:AAEVgIIdI-ZkneGlOfNP30QfsgPrymqa5_Y"  # Tomar Telegram Bot Token
-CHAT_ID = "6819917637"      # Tomar Telegram Chat ID
+BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN" # তোমার টেলিগ্রাম বট টোকেন বসাও
+CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"     # তোমার টেলিগ্রাম চ্যাট আইডি বসাও
 
 def send_telegram_alert(message: str):
     if not BOT_TOKEN or not CHAT_ID:
@@ -56,15 +56,17 @@ class LicenseModel(BaseModel):
 def home():
     return {"status": "Online", "message": "Pro Trading Bot SaaS API Engine Running with Supabase DB!"}
 
-# 1. License Validation (Supabase DB)
+# ১. লাইসেন্স ভ্যালিডেশন
 @app.get("/verify-license/{license_key}")
 def verify_license(license_key: str):
     try:
-        response = supabase.table("licenses").select("*").eq("key", license_key).execute()
+        # Strip string to prevent space errors
+        clean_key = license_key.strip()
+        response = supabase.table("licenses").select("*").eq("key", clean_key).execute()
         data = response.data
 
         if not data:
-            return {"status": False, "tier": "None", "message": "Invalid License Key!"}
+            return {"status": False, "tier": "None", "message": f"License Key '{clean_key}' Not Found in Database!"}
 
         lic_data = data[0]
         tier = lic_data["tier"]
@@ -76,28 +78,17 @@ def verify_license(license_key: str):
 
         return {"status": True, "tier": tier, "message": f"License Valid! Tier: {tier}"}
     except Exception as e:
-        return {"status": False, "tier": "None", "message": f"Database Error: {str(e)}"}
+        return {"status": False, "tier": "None", "message": f"Database Connection Error: {str(e)}"}
 
-# 2. Add License Endpoint (Supabase DB)
-@app.post("/add-license")
-def add_new_license(data: LicenseModel):
-    try:
-        payload = {
-            "key": data.key,
-            "tier": data.tier,
-            "expires": data.expires
-        }
-        supabase.table("licenses").upsert(payload).execute()
-        return {"status": True, "message": f"License key '{data.key}' permanently saved to Supabase!"}
-    except Exception as e:
-        return {"status": False, "message": f"Database Error: {str(e)}"}
-
-# 3. Trade Trigger & Telegram Alert Endpoint
+# ২. ট্রেড ট্রিগার ও টেলিগ্রাম অ্যালার্ট এন্ডপয়েন্ট
 @app.post("/trigger-trade/{license_key}/{action}")
 def trigger_trade(license_key: str, action: str):
     val_res = verify_license(license_key)
     if not val_res["status"]:
-        return {"status": False, "message": "Unauthorized! Invalid or expired license key."}
+        return {
+            "status": False, 
+            "message": f"Unauthorized! Details: {val_res['message']}"
+        }
 
     price = fetch_btc_price()
     action_upper = action.upper()
