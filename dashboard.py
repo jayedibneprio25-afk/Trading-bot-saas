@@ -52,3 +52,35 @@ with col_right:
             st.info("No trades recorded in database yet.")
     except Exception as e:
         st.error(f"Error loading trade history: {e}")
+        import streamlit as st
+import requests
+from core.license_engine import license_engine
+
+st.set_page_config(page_title="SaaS Bot Admin Panel", layout="wide")
+
+st.title("🛡️ SaaS Trading Bot - License Management Panel")
+st.markdown("---")
+
+# ১. নতুন লাইসেন্স কি তৈরি করার সেকশন
+st.subheader("🔑 Generate New License Key")
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    new_key = st.text_input("License Key", value="PRO-AMIR-2026")
+with col2:
+    tier_option = st.selectbox("Tier", ["Pro", "Free"])
+with col3:
+    expiry_date = st.date_input("Expiry Date")
+
+if st.button("Add/Update License"):
+    license_engine.valid_keys[new_key] = {
+        "tier": tier_option,
+        "expires": str(expiry_date)
+    }
+    st.success(f"License Key `{new_key}` successfully configured for **{tier_option}** Tier!")
+
+st.markdown("---")
+
+# ২. বর্তমান লাইসেন্স ডাটাবেস টেবিল
+st.subheader("📋 Active License Database")
+st.json(license_engine.valid_keys)
