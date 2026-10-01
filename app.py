@@ -2,18 +2,20 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime
 import requests
+from supabase import create_client, Client
 
 app = FastAPI(title="Pro Trading Bot SaaS API")
 
-# Central In-Memory Storage for API Server
-VALID_LICENSES = {
-    "PRO-AMIR-2026": {"tier": "Pro", "expires": "2027-12-31"},
-    "PRO-TEST-2026": {"tier": "Pro", "expires": "2027-12-31"}
-}
+# --- Supabase Credentials ---
+SUPABASE_URL = "https://zvzbbhjzesubyxbknxd.supabase.co"
+SUPABASE_KEY = "sb_publishable_7vsvBnouIM1bFkYkHX_dYg_vkgan..."  # তোমার কপি করা পুরো Key-টি পেস্ট করো
+
+# Supabase Client Initialization
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- Telegram Credentials ---
-BOT_TOKEN = "8615449265:AAEVgIIdI-ZkneGlOfNP30QfsgPrymqa5_Y"
-CHAT_ID = "6819917637"
+BOT_TOKEN = "8615449265:AAEVgIIdI-ZkneGlOfNP30QfsgPrymqa5_Y"  # তোমার টেলিগ্রাম বট টোকেন বসাও
+CHAT_ID = "6819917637"      # তোমার টেলিগ্রাম চ্যাট আইডি বসাও
 
 def send_telegram_alert(message: str):
     if not BOT_TOKEN or not CHAT_ID:
@@ -52,49 +54,54 @@ class LicenseModel(BaseModel):
 
 @app.get("/")
 def home():
-    return {"status": "Online", "message": "Pro Trading Bot SaaS API Engine Running!"}
+    return {"status": "Online", "message": "Pro Trading Bot SaaS API Engine Running with Supabase DB!"}
 
-# ১. লাইসেন্স ভ্যালিডেশন
+# ১. লাইসেন্স ভ্যালিডেশন (Supabase DB থেকে চেক)
 @app.get("/verify-license/{license_key}")
 def verify_license(license_key: str):
-    if license_key not in VALID_LICENSES:
-        return {"status": False, "tier": "None", "message": "Invalid License Key!"}
-
-    lic_data = VALID_LICENSES[license_key]
-    tier = lic_data["tier"]
-    expires_str = lic_data["expires"]
-
     try:
+        response = supabase.table("licenses").select("*").eq("key", license_key).execute()
+        data = response.data
+
+        if not data:
+            return {"status": False, "tier": "None", "message": "Invalid License Key!"}
+
+        lic_data = data[0]
+        tier = lic_data["tier"]
+        expires_str = str(lic_data["expires"])
+
         expiry_date = datetime.strptime(expires_str, "%Y-%m-%d")
         if datetime.now() > expiry_date:
             return {"status": False, "tier": tier, "message": f"License Key Expired on {expires_str}"}
-    except ValueError:
-        pass
 
-    return {"status": True, "tier": tier, "message": f"License Valid! Tier: {tier}"}
+        return {"status": True, "tier": tier, "message": f"License Valid! Tier: {tier}"}
+    except Exception as e:
+        return {"status": False, "tier": "None", "message": f"Database Error: {str(e)}"}
 
-# ২. ড্যাশবোর্ড থেকে লাইসেন্স যোগ করার এন্ডপয়েন্ট
+# ২. ড্যাশবোর্ড থেকে লাইসেন্স যোগ করার এন্ডপয়েন্ট (Supabase-এ পার্মানেন্ট সেভ)
 @app.post("/add-license")
 def add_new_license(data: LicenseModel):
-    VALID_LICENSES[data.key] = {
-        "tier": data.tier,
-        "expires": data.expires
-    }
-    return {"status": True, "message": f"License key '{data.key}' added to active API memory!"}
+    try:
+        payload = {
+            "key": data.key,
+            "tier": data.tier,
+            "expires": data.expires
+        }
+        supabase.table("licenses").upsert(payload).execute()
+        return {"status": True, "message": f"License key '{data.key}' permanently saved to Supabase!"}
+    except Exception as e:
+        return {"status": False, "message": f"Database Error: {str(e)}"}
 
 # ৩. ট্রেড ট্রিগার ও টেলিগ্রাম অ্যালার্ট এন্ডপয়েন্ট
 @app.post("/trigger-trade/{license_key}/{action}")
 def trigger_trade(license_key: str, action: str):
-    # লাইসেন্স চেক
     val_res = verify_license(license_key)
     if not val_res["status"]:
         return {"status": False, "message": "Unauthorized! Invalid or expired license key."}
 
-    # বাই/সেল প্রাইস ফেচ
     price = fetch_btc_price()
     action_upper = action.upper()
 
-    # নোটিফিকেশন মেসেজ ফরম্যাট
     if action_upper == "BUY":
         msg = (
             f"🚀 **BUY SIGNAL EXECUTED**\n\n"
@@ -112,7 +119,6 @@ def trigger_trade(license_key: str, action: str):
             f"💼 **Status:** Paper Trade Executed"
         )
 
-    # টেলিগ্রামে মেসেজ পাঠানো
     send_telegram_alert(msg)
 
     return {

@@ -3,5 +3,4 @@ uvicorn
 requests
 pydantic
 streamlit
-python-dotenv
-pandas
+supabase
