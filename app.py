@@ -1,68 +1,105 @@
-from core.license_engine import license_engine
-from fastapi import FastAPI
-import threading
-import time
-from config.settings import config
-from utils.logger import logger
-from core.data_engine import data_engine
-from core.trade_engine import trade_engine
-from core.strategy_engine import strategy_engine
-from core.risk_engine import risk_engine
-from core.telegram_engine import telegram_engine
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import sqlite3
+from datetime import datetime
 
-app = FastAPI(title="Pro Trading Bot SaaS Engine")
+app = FastAPI(title="Pro Trading Bot SaaS API")
 
-bot_running = False
+DB_NAME = "trading_bot.db"
 
-def run_bot_loop():
-    """২৪/৭ ব্যাকগ্রাউন্ড অটো-ট্রেডিং লুপ"""
-    global bot_running
-    bot_running = True
-    logger.info("🚀 Background Trading Engine Started (24/7 Loop Active)...")
+# ১. ডাটাবেস ও টেবিল স্বয়ংক্রিয়ভাবে তৈরি করার ফাংশন
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
     
-    # Deployment Notification to Telegram
-    telegram_engine.send_alert("🌐 *SaaS Bot Engine Live on Cloud Server!*")
+    # trade_history টেবিল
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS trade_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            action TEXT,
+            price REAL,
+            amount REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # licenses টেবিল
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS licenses (
+            key TEXT PRIMARY KEY,
+            tier TEXT,
+            expires TEXT
+        )
+    ''')
+    
+    # প্রাথমিক টেস্ট কি
+    cursor.execute('''
+        INSERT OR IGNORE INTO licenses (key, tier, expires)
+        VALUES ('PRO-AMIR-2026', 'Pro', '2027-12-31')
+    ''')
+    
+    conn.commit()
+    conn.close()
 
-    while bot_running:
-        try:
-            # 1. Fetch Live Price
-            price = data_engine.get_live_price("BTCUSDT")
-            
-            if price:
-                # 2. Check Strategy Signal
-                prices = [price * (1 + (i * 0.001)) for i in range(-20, 0)]
-                signal = strategy_engine.generate_signal(prices)
-                
-                # 3. Execute Trade on Signal
-                if signal == "BUY" and "BTCUSDT" not in trade_engine.positions:
-                    trade_engine.execute_order("BTCUSDT", "BUY", price, 100.0)
-                    telegram_engine.send_alert(f"🟢 *BUY Executed* at ${price}")
-                
-                # 4. Check Risk Management
-                if "BTCUSDT" in trade_engine.positions:
-                    pos = trade_engine.positions["BTCUSDT"]
-                    action = risk_engine.check_exit_conditions(pos["entry_price"], price)
-                    if action in ["SELL_STOP_LOSS", "SELL_TAKE_PROFIT"]:
-                        trade_engine.execute_order("BTCUSDT", "SELL", price, pos["amount_usd"])
-                        telegram_engine.send_alert(f"🔴 *Position Closed ({action})* at ${price}")
+# অ্যাপ চালুর সময় ডাটাবেস ইনিশিয়ালাইজেশন
+init_db()
 
-        except Exception as e:
-            logger.error(f"Error in trading loop: {e}")
 
-        time.sleep(30)
+# ২. ডাটা মডেল (Pydantic)
+class LicenseModel(BaseModel):
+    key: str
+    tier: str
+    expires: str
 
-@app.on_event("startup")
-def startup_event():
-    thread = threading.Thread(target=run_bot_loop, daemon=True)
-    thread.start()
 
+# ৩. রুট এপিআই (Root Route)
 @app.get("/")
-def health_check():
-    return {
-        "status": "online",
-        "system": "Pro Trading Bot SaaS",
-        "environment": config.ENV}
-@app.get("/verify-license/{key}")
-def verify_user_license(key: str):
-    result = license_engine.verify_license(key)
-    return result        
+def home():
+    return {"status": "Online", "message": "Pro Trading Bot SaaS API Engine Running!"}
+
+
+# ৪. লাইসেন্স ভ্যালিডেশন করার এন্ডপয়েন্ট
+@app.get("/verify-license/{license_key}")
+def verify_license(license_key: str):
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT tier, expires FROM licenses WHERE key = ?", (license_key,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        return {"status": False, "tier": "None", "message": "Invalid License Key!"}
+
+    tier, expires_str = row
+    try:
+        expiry_date = datetime.strptime(expires_str, "%Y-%m-%d")
+        if datetime.now() > expiry_date:
+            return {"status": False, "tier": tier, "message": f"License Key Expired on {expires_str}"}
+    except ValueError:
+        pass
+
+    return {"status": True, "tier": tier, "message": f"License Valid! Tier: {tier}"}
+
+
+# ৫. ড্যাশবোর্ড থেকে নতুন লাইসেন্স সেভ/আপডেট করার এন্ডপয়েন্ট
+@app.post("/add-license")
+def add_new_license(data: LicenseModel):
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO licenses (key, tier, expires)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            tier = excluded.tier,
+            expires = excluded.expires
+    ''', (data.key, data.tier, data.expires))
+    
+    conn.commit()
+    conn.close()
+    
+    return {"status": True, "message": f"License key '{data.key}' successfully saved to database."}
